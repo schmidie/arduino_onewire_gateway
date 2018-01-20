@@ -40,6 +40,7 @@ struct Node {
   String email;
   int id;
 } node;
+
 struct Sensor {
   String mac;
 } sensor;
@@ -109,23 +110,33 @@ void connect_wlan() {
 
 void client_begin(const char * path){
       client.begin(config.host, config.port, path , config.sha_1); //HTTPS
+      client.setReuse(true);
       client.addHeader("Content-Type", "application/json");
 
 }
 void setHeaders() {
   if (token.access_token.length()) {
     Serial.print("set headers");
-    client.addHeader("access_token", token.access_token);
+    client.addHeader("access-token", token.access_token);
     client.addHeader("client", token.client);
     client.addHeader("expiry", token.expiry);
     client.addHeader("uid", token.uid);
   }
 }
+
+void getHeaders() {
+  const char * headerkeys[] = {"access-token","client","expiry","uid"} ;
+  size_t headerkeyssize = sizeof(headerkeys)/sizeof(char*);
+  client.collectHeaders(headerkeys,headerkeyssize);
+}
+
 // TODO: refactor to dont use String
 String request(method meth, const char* path, String request_body = "") {
-  setHeaders();
 
   client_begin(path);
+  setHeaders();
+  getHeaders();
+
   int statusCode = -1;
   if (meth == POST) {
     statusCode = client.POST(request_body);
@@ -144,14 +155,14 @@ String request(method meth, const char* path, String request_body = "") {
   Serial.print("statuscode: " + String(statusCode));
 
   if(statusCode == 200){
-    token.access_token = client.header("access_token");
+    token.access_token = client.header("access-token");
     token.client = client.header("client");
     token.expiry = client.header("expiry");
     token.uid = client.header("uid");
 
-    Serial.print(token.access_token);
-
+    client.end();
     return response;
+
   } else{
     Serial.print("Cannot request " + String(path));
   }
@@ -159,16 +170,25 @@ String request(method meth, const char* path, String request_body = "") {
   return "";
 }
 
+int get_id(String json_string){
+  StaticJsonBuffer<512> jsonBuffer;
+  // Parse the root object
+  JsonObject &json = jsonBuffer.parseObject(json_string);
+
+  if (!json.success()){
+    Serial.println(F("Failed to read json"));
+    return -1;
+  }
+  return json["data"]["id"];
+}
 
 bool create_login() {
   String request_body = "{\"email\"=\"" + node.email + "\",\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
   String response = request(POST, "/node_auth", request_body);
   if (response.length()){
-    node.id = client.header("id").toInt();
-    client.end();
+    node.id = get_id(response);
     return true;
   }
-  client.end();
   return false;
 }
 
@@ -176,28 +196,23 @@ bool login() {
   String request_body = "{\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
   String response = request(POST, "/node_auth/sign_in", request_body);
   if (response.length()){
-    node.id = client.header("id").toInt();
-
-    client.end();
+    node.id = get_id(response);
     return true;
   }
 
-  client.end();
   return false;
 }
 
 String get_node_data() {
   String request_body = "{\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
   String path = "/nodes/" + String(node.id);
-  String response = request(GET, const_cast<char*>(path.c_str()));
-
-  client.end();
-  return response;
+  return request(GET, const_cast<char*>(path.c_str()));
 }
 
 
 
 void setup() {
+    Serial.setDebugOutput(true);
     // put your setup code here, to run once:
     Serial.begin(9600);
 
@@ -206,8 +221,6 @@ void setup() {
     load_config(json_config);
 
     connect_wlan();
-
-    // client.setContentType("application/json");
 
     if(!login()){
       create_login();
