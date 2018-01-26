@@ -63,7 +63,11 @@ struct Node {
     String mac; // String representation of addr
     DeviceAddress addr;
     int id;
-    std::vector<String> data;
+    struct Data {
+      float value;
+      String unity;
+    };
+    std::vector<Node::Sensor::Data> data;
   };
   std::vector<Node::Sensor> sensors;
 
@@ -97,7 +101,7 @@ void initialize(){
   // get node settings
   node.mac = WiFi.macAddress();
   node.pw = "123123123"; // TODO
-  node.email = "test@test.de"; // TODO
+  node.email = "node1@energeer.de"; // TODO
 
   get_sensors_mac();
 }
@@ -210,7 +214,7 @@ int get_id(String json_string){
 }
 
 bool create_login() {
-  String request_body = "{\"email\"=\"" + node.email + "\",\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
+  String request_body = "{\"email\":\"" + node.email + "\",\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
   String response = request(POST, "/node_auth", request_body);
   if (response.length()){
     node.id = get_id(response);
@@ -246,41 +250,55 @@ bool create_sensor(Node& node, Node::Sensor& sensor) {
 }
 
 bool create_sensors(Node& node) {
+  bool retval = true;
   for(int i = 0; i < node.sensors.size(); i++){
-    create_sensor(node, node.sensors[i]);
+    retval = create_sensor(node, node.sensors[i]);
+    if(!retval) {
+      Serial.println("error: create remote sensor");
+    }
   }
+  return retval;
 }
 
-bool push_sensor_data(String* sensor_data,int data_count, String sensor_mac) {
+String build_json_data() {
   // Allocate the memory pool on the stack.
-  StaticJsonBuffer<4000> jsonBuffer; //TODO: capacity: arduinojson.org/assistant
+  StaticJsonBuffer<1024> jsonBuffer; //TODO: capacity: arduinojson.org/assistant
   JsonObject& _json = jsonBuffer.createObject();
   JsonArray& _sensors = _json.createNestedArray("sensors");
 
-  JsonObject& _s = _sensors.createNestedObject();
-  _s["mac"] = sensor_mac;
-  // JsonArray& _sensor_data = _s.createNestedArray("sensor_data");
-  // for(int i = 0; i < data_count; i++){
-  //   _sensor_data.add(sensor_data[i]);
-  // }
-  _json.printTo(Serial);
-  // String request_body = "{\"mac\":\"" + sensor.mac + "\"}";
-  // String path = "/nodes/" + String(node.id) + "/sensor_data/";
-  // String response = request(POST, const_cast<char*>(path.c_str()), request_body);
+  // get all sensors
+  for(int i = 0; i < node.sensors.size(); i++){
+    JsonObject& _s = _sensors.createNestedObject();
+    _s["mac"] = node.sensors[i].mac;
+    JsonArray& _data = _s.createNestedArray("sensor_data");
+    // get all data
+    for(int j = 0; j < node.sensors[i].data.size(); j++){
+      JsonObject& _datum = _data.createNestedObject();
+      _datum["value"] = node.sensors[i].data[j].value;
+      _datum["unity"] = node.sensors[i].data[j].unity;
+    }
+    // clear data_buffer
+    node.sensors[i].data.clear();
+  }
+
+  String json_data = "";
+  _json.printTo(json_data);
+
+  return json_data;
 
 }
 
-// TODO: with created_at
-String json_data(float value, String u) {
-    // Allocate the memory pool on the stack.
-    StaticJsonBuffer<512> jsonBuffer; //TODO: capacity: arduinojson.org/assistant
-    JsonObject& json = jsonBuffer.createObject();
-    json["value"] = value;
-    json["unity"] = u;
-    String json_data = "";
-    json.printTo(json_data);
-    return json_data;
-}
+// // TODO: with created_at
+// String json_data(float value, String u) {
+//     // Allocate the memory pool on the stack.
+//     StaticJsonBuffer<512> jsonBuffer; //TODO: capacity: arduinojson.org/assistant
+//     JsonObject& json = jsonBuffer.createObject();
+//     json["value"] = value;
+//     json["unity"] = u;
+//     String json_data = "";
+//     json.printTo(json_data);
+//     return json_data;
+// }
 
 
 
@@ -297,32 +315,45 @@ void setup() {
     load_config(json_config);
 
     initialize();
-    //connect_wlan();
+    connect_wlan();
 
-    // if(!login()){
-    //   create_login();
-    // }
-    // create_sensor();
+    // // if node not exist on API -> create
+    if(!login()){
+      create_login();
+    }
+    login();
+    // // if sensors not exist on API -> create
+    create_sensors(node);
 }
 
+void get_sensor_data(){
+  // Send the command to get temperature readings
+  sensors.requestTemperatures();
+
+  for(int i = 0; i < node.sensors.size(); i++){
+    float temp = sensors.getTempC(node.sensors[i].addr);
+    Node::Sensor::Data data;
+    data.value = temp;
+    data.unity = "celsius";
+    node.sensors[i].data.push_back(data);
+  }
+}
+
+bool push_sensor_data(String data){
+  String path = "/nodes/" + String(node.id) + "/sensor_data/";
+  String response = request(POST, const_cast<char*>(path.c_str()), data);
+  Serial.println(response);
+}
 
 void loop() {
-  //login();
-  //Serial.print(get_node_data());
-  Serial.println("start loop");
+  login();
 
-  Serial.println(node.mac);
-  for(int i = 0; i < node.sensors.size(); i++){
-    Serial.println(node.sensors[i].mac);
-  }
-  // request sensor data
-  // sensors.requestTemperatures(); // Send the command to get temperature readings
-  // float temp = sensors.getTempCByIndex(0);
-  // // push sensor data to buffer
-  // sensor.data[sensor.data_count] = json_data(temp, "celsius");
-  // sensor.data_count ++;
-  //
-  // push_sensor_data(sensor.data,sensor.data_count, sensor.mac);
-  delay(1000);
+  // save sensor_data in buffer (for all sensors on bus)
+  get_sensor_data();
 
+  // push sensor_data to API
+  push_sensor_data(build_json_data());
+  //Serial.println(build_json_data());
+
+  delay(3000);
 }
