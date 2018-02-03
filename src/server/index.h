@@ -95,7 +95,7 @@ static const char* INDEX_PAGE PROGMEM = R"=====(
   <BODY>
     <div class="form-style-6">
       <h1>energeer.de WLAN-Einstellungen</h1>
-      <form action='/settings'>
+      <form method="POST" action='/settings'>
         <input type="text" name="ssid" placeholder="SSID" />
         <input type="password" name="password" placeholder="Passwort" />
         <input type="submit" value="speichern" />
