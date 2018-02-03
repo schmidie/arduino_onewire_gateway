@@ -1,3 +1,7 @@
+#ifndef INDEX_H_
+#define INDEX_H_
+
+
 #include <pgmspace.h>
 #include <Arduino.h>
 
@@ -100,3 +104,6 @@ static const char* INDEX_PAGE PROGMEM = R"=====(
   </BODY>
   </HTML>
 )=====";
+
+
+#endif /* INDEX_H_ */
