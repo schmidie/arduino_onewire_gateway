@@ -6,6 +6,16 @@
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
 
+// webserver
+#include <ESP8266WebServer.h>
+//#include <ESP8266WebServerSecure.h>
+// multicast DNS for nice local domain name
+#include <ESP8266mDNS.h>
+
+// ESP Webserver files (html and certificates)
+//#include "server/cert.h"
+#include "server/index.h"
+
 // json parsing
 #include <ArduinoJson.h>
 
@@ -24,16 +34,23 @@ DallasTemperature sensors(&one_wire);
 
 #define HTTP_DEBUG
 
-// TODO:multiple ssids/wlans
-const char* json_config = "{"
-  "\"host\": \"api-v1.teufelswerk-berlin.de\","
-  "\"port\": 443,"
-  "\"wifi_ssid\": \"Speedy\","
-  "\"wifi_pw\": \"Seifenblase\","
-  "\"sha_1\": \"88:49:DD:29:76:84:DF:E3:3E:60:81:5E:7E:4A:D9:88:77:C1:67:9D\""
-"}";
 
 HTTPClient client;
+//ESP8266WebServerSecure server(443);
+ESP8266WebServer server(80); //Server on port 80
+
+//SSID and Password to our ESP-Server
+const char* ssid = "ENERGEER";
+const char* password = "";
+
+// API settings
+const char* host = "api-v1.teufelswerk-berlin.de";
+const int port = 443;
+const char* sha_1 = "88:49:DD:29:76:84:DF:E3:3E:60:81:5E:7E:4A:D9:88:77:C1:67:9D";
+
+/*
+*############## Data ##################
+*/
 
 enum method {
   POST,
@@ -45,6 +62,7 @@ enum unity {
 };
 
 // Configuration that we'll store on disk
+// TODO:multiple ssids/wlans
 struct Config {
   char host[64];
   int port;
@@ -80,6 +98,33 @@ struct Token {
   String uid;
 } token;
 
+/*
+*######################################
+*/
+
+
+
+void handleRoot() {
+  server.sendHeader("Connection", "close");
+  server.send(200, "text/html", INDEX_PAGE); //Send web page
+}
+
+void handleSettings() {
+
+  if (server.arg("ssid")!= ""){
+    strlcpy(config.wifi_ssid, server.arg("ssid").c_str(), sizeof(config.wifi_ssid));
+    strlcpy(config.wifi_pw, server.arg("password").c_str(), sizeof(config.wifi_pw));
+    Serial.println(config.wifi_ssid);
+    Serial.println(config.wifi_pw);
+    server.sendHeader("Connection", "close");
+    server.send(200, "text/plain", "Einstellungen gespeichert!");
+  }
+  else {
+    server.sendHeader("Connection", "close");
+    server.send(200, "text/plain", "SSID nicht gefunden!");
+  }
+}
+
 void get_sensors_mac(){
   DeviceAddress mac;
 
@@ -96,33 +141,19 @@ void get_sensors_mac(){
   one_wire.reset_search();
 }
 
-// initialize
 void initialize(){
   // get node settings
   node.mac = WiFi.macAddress();
   node.pw = "123123123"; // TODO
-  node.email = "node1@energeer.de"; // TODO
+  node.email = node.mac + "@energeer.de"; // TODO
 
+  // get api settings
+  config.port = port;
+  strlcpy(config.host, host ,sizeof(config.host));
+  strlcpy(config.sha_1, sha_1 ,sizeof(config.sha_1));
+
+  // get mac addresses of all sensors
   get_sensors_mac();
-}
-
-// Loads the configuration from a file
-void load_config(const char* json_config) {
-
-  // Allocate the memory pool on the stack.
-  StaticJsonBuffer<512> jsonBuffer; //TODO: capacity: arduinojson.org/assistant
-  // Parse the root object
-  JsonObject &root = jsonBuffer.parseObject(json_config);
-
-  if (!root.success())
-    Serial.println(F("Failed to read config, using default configuration"));
-
-  // Copy values from the JsonObject to the Config
-  config.port = root["port"] | 443;
-  strlcpy(config.host, root["hostname"] | "api-v1.teufelswerk-berlin.de" ,sizeof(config.host));
-  strlcpy(config.wifi_ssid, root["wifi_ssid"] | "" ,sizeof(config.wifi_ssid));
-  strlcpy(config.wifi_pw, root["wifi_pw"] | "" ,sizeof(config.wifi_pw));
-  strlcpy(config.sha_1, root["sha_1"] | "" ,sizeof(config.sha_1));
 }
 
 void connect_wlan() {
@@ -207,7 +238,7 @@ int get_id(String json_string){
   JsonObject &json = jsonBuffer.parseObject(json_string);
 
   if (!json.success()){
-    Serial.println(F("Failed to read json"));
+    Serial.println("Failed to read json");
     return -1;
   }
   return json["data"]["id"];
@@ -310,20 +341,34 @@ void setup() {
     // Start up the library
     sensors.begin();
 
-    // Should load default config if run for the first time
-    //Serial.println(F("Loading configuration..."));
-    load_config(json_config);
+    WiFi.mode(WIFI_AP);           //Only Access point
+    WiFi.softAP(ssid, password);  //Start HOTspot removing password will disable security
+
+    if (MDNS.begin("energeer")) {
+      Serial.println("MDNS responder started");
+    }
+
+    IPAddress myIP = WiFi.softAPIP(); //Get IP address
+    Serial.print("HotSpt IP:");
+    Serial.println(myIP);
+
+    // server.setServerKeyAndCert_P(rsakey, sizeof(rsakey), x509, sizeof(x509));
+
+    server.on("/", handleRoot);
+    server.on("/settings", handleSettings);
+    server.begin();
+    Serial.println("HTTP server started");
 
     initialize();
-    connect_wlan();
-
-    // // if node not exist on API -> create
-    if(!login()){
-      create_login();
-    }
-    login();
-    // // if sensors not exist on API -> create
-    create_sensors(node);
+    // connect_wlan();
+    //
+    // // // if node not exist on API -> create
+    // if(!login()){
+    //   create_login();
+    // }
+    // login();
+    // // // if sensors not exist on API -> create
+    // create_sensors(node);
 }
 
 void get_sensor_data(){
@@ -346,14 +391,16 @@ bool push_sensor_data(String data){
 }
 
 void loop() {
-  login();
-
-  // save sensor_data in buffer (for all sensors on bus)
-  get_sensor_data();
-
-  // push sensor_data to API
-  push_sensor_data(build_json_data());
-  //Serial.println(build_json_data());
-
-  delay(3000);
+  //Handle client requests // TODO: is this a blocking function ?
+  server.handleClient();
+  // login();
+  //
+  // // save sensor_data in buffer (for all sensors on bus)
+  // get_sensor_data();
+  //
+  // // push sensor_data to API
+  // push_sensor_data(build_json_data());
+  // //Serial.println(build_json_data());
+  //
+  // delay(3000);
 }
