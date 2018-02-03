@@ -3,15 +3,39 @@
  */
 #include <APIClient.h>
 
-/**
- * constructor
- */
 APIClient::APIClient(){}
-
-/**
- * destructor
- */
 APIClient::~APIClient(){}
+
+bool APIClient::create_login(Node& node) {
+  String request_body = "{\"email\":\"" + node.email + "\",\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
+  String response = request(POST, "/node_auth", request_body);
+  // if API does not know the sensors -> create
+  // TODO: check before if sensors exists on API
+  create_sensors(node);
+  if (response.length()){
+    node.id = get_id(response);
+    return true;
+  }
+  return false;
+}
+
+bool APIClient::login(Node& node) {
+  String request_body = "{\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
+  String response = request(POST, "/node_auth/sign_in", request_body);
+  if (response.length()){
+    node.id = get_id(response);
+    return true;
+  }
+  return false;
+}
+
+bool APIClient::push_sensor_data(Node& node){
+  String path = "/nodes/" + String(node.id) + "/sensor_data/";
+  String response = request(POST, const_cast<char*>(path.c_str()), build_json_data(node));
+  Serial.println(response);
+}
+
+// ################### helpers ####################
 
 void APIClient::setHeaders() {
   if (token.access_token.length()) {
@@ -21,12 +45,6 @@ void APIClient::setHeaders() {
     client.addHeader("expiry", token.expiry);
     client.addHeader("uid", token.uid);
   }
-}
-
-bool APIClient::push_sensor_data(){
-  String path = "/nodes/" + String(node.id) + "/sensor_data/";
-  String response = request(POST, const_cast<char*>(path.c_str()), build_json_data());
-  Serial.println(response);
 }
 
 void APIClient::getHeaders() {
@@ -82,6 +100,7 @@ String APIClient::request(method meth, const char* path, String request_body) {
   return "";
 }
 
+// get id from json response string
 int APIClient::get_id(String json_string){
   StaticJsonBuffer<512> jsonBuffer;
   // Parse the root object
@@ -94,27 +113,7 @@ int APIClient::get_id(String json_string){
   return json["data"]["id"];
 }
 
-bool APIClient::create_login() {
-  String request_body = "{\"email\":\"" + node.email + "\",\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
-  String response = request(POST, "/node_auth", request_body);
-  if (response.length()){
-    node.id = get_id(response);
-    return true;
-  }
-  return false;
-}
-
-bool APIClient::login() {
-  String request_body = "{\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
-  String response = request(POST, "/node_auth/sign_in", request_body);
-  if (response.length()){
-    node.id = get_id(response);
-    return true;
-  }
-  return false;
-}
-
-String APIClient::get_node_data() {
+String APIClient::get_node_data(Node& node) {
   String path = "/nodes/" + String(node.id);
   return request(GET, const_cast<char*>(path.c_str()));
 }
@@ -141,7 +140,7 @@ bool APIClient::create_sensors(Node& node) {
   return retval;
 }
 
-String APIClient::build_json_data() {
+String APIClient::build_json_data(Node& node) {
   // Allocate the memory pool on the stack.
   StaticJsonBuffer<1024> jsonBuffer; //TODO: capacity: arduinojson.org/assistant
   JsonObject& _json = jsonBuffer.createObject();

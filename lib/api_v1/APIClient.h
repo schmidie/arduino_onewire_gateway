@@ -9,8 +9,6 @@
 #include <ESP8266HTTPClient.h>
 #include <DallasTemperature.h>
 
-HTTPClient client;
-
 enum method {
   POST,
   GET
@@ -38,14 +36,14 @@ struct Node {
   };
   std::vector<Node::Sensor> sensors;
 
-} node;
+};
 
 struct Token {
   String access_token;
   String client;
   String expiry;
   String uid;
-} token;
+};
 
 // TODO: split this in api_config and wifi_config
 // Configuration that we'll store on disk
@@ -55,35 +53,39 @@ struct Config {
   char sha_1[64];
   char wifi_ssid[64];
   char wifi_pw[64];
-} config;
+};
 
 class APIClient
 {
   public:
+
     APIClient();
     ~APIClient();
 
-    // create/register sensors to API
-    bool create_sensors(Node& node);
     // register to API
-    bool create_login();
+    // the Node structure must be build up before
+    // with mac, pw, sensor_mac , etc.
+    bool create_login(Node& node);
     // login to API and set header-credentials(token,uid,expiry,client)
-    bool login();
-
-    // push sensor_data to API
-    bool push_sensor_data();
-
+    bool login(Node& node);
+    // push sensor_data to API (for all sensors of node)
+    bool push_sensor_data(Node& node);
 
   private:
-    String build_json_data();
+    String build_json_data(Node& node);
+    // create/register sensors to API
+    bool create_sensors(Node& node);
     bool create_sensor(Node& node, Node::Sensor& sensor);
     void setHeaders();
     void getHeaders();
     void client_begin(const char * path);
     String request(method meth, const char* path, String request_body = "");
     int get_id(String json_string);
-    String get_node_data();
+    String get_node_data(Node& node);
 
+    // API tokens
+    Token token;
+    HTTPClient client;
 };
 
 #endif /* APIClient_H_ */
