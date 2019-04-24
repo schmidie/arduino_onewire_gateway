@@ -4,7 +4,7 @@
 // loop cycle for controlling the processor loop
 int cycle = 0;
 // in which loop_interval we want to push sensor data
-int push_interval = 1;
+int push_interval = 10;
 // is node connected to wlan ?
 bool wlan = false;
 
@@ -47,7 +47,7 @@ void loop() {
   }
 
   // try to login to API, if we are not allready logged in
-  if(wlan && !client.logged_in(node)){
+  if(wlan /*&& !client.logged_in(node)*/){
     try_login();
   }
 

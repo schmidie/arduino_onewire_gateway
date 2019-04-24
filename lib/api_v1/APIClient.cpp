@@ -34,6 +34,9 @@ bool APIClient::login(Node& node) {
   String response = request(POST, "/node_auth/sign_in", request_body);
   Serial.println(response);
 
+  // TODO
+  create_sensors(node);
+
   if (response.length()){
     node.id = get_id(response);
     return true;
