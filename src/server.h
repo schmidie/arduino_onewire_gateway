@@ -27,7 +27,10 @@ void handleSettings() {
 
   if (server.arg("ssid")!= ""){
 
+    // TODO: add API-key
     update_wifi(server.arg("ssid"), server.arg("password"));
+    update_secret(server.arg("secret"));
+ 
     server.sendHeader("Connection", "close");
     server.send(200, "text/html", INDEX_PAGE);
   }

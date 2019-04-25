@@ -21,7 +21,6 @@ enum unity {
 struct Node {
   String mac;
   String pw;
-  String email;
   int id;
 
   struct Sensor {
@@ -66,13 +65,14 @@ class APIClient
     bool login(Node& node);
     // push sensor_data to API (for all sensors of node)
     bool push_sensor_data(Node& node);
+    // create/register sensors to API
+    bool create_sensors(Node& node);
 
     bool logged_in(Node& node);
 
   private:
     String build_json_data(Node& node);
-    // create/register sensors to API
-    bool create_sensors(Node& node);
+
     bool create_sensor(Node& node, Node::Sensor& sensor);
     void setHeaders();
     void getHeaders();

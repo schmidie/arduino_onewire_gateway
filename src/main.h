@@ -49,13 +49,15 @@ struct WifiConfig{
 static WifiConfig config;
 
 bool try_login(){
-  if (config.ssid.length()){
-    // if node not exist on API -> create
-    if(!client.login(node)){
-      client.create_login(node);
-    }
+  if (config.ssid.length() && client.login(node)){
+      // TODO: first check if they are already created
+      client.create_sensors(node);
   }
   return client.logged_in(node);
+}
+
+void update_secret(String secret){
+  node.pw = secret;
 }
 
 // TODO: we should save this to EEPROM
@@ -104,8 +106,6 @@ void get_sensors_mac(){
 void initialize(){
   // get node settings
   node.mac = WiFi.macAddress();
-  node.pw = "123123123"; // TODO
-  node.email = node.mac + "@energeer.de";
 
   // get mac addresses of all sensors
   get_sensors_mac();

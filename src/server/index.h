@@ -8,8 +8,8 @@
 // save index page on flash-memory (NOT SRAM or EEPROM)!
 static const char* INDEX_PAGE PROGMEM = R"=====(
   <HTML>
-  	<HEAD>
-  			<TITLE>energeer.de</TITLE>
+    <HEAD>
+        <TITLE>controller settings</TITLE>
         <style type="text/css">
       .form-style-6{
           font: 95% Arial, Helvetica, sans-serif;
@@ -91,14 +91,20 @@ static const char* INDEX_PAGE PROGMEM = R"=====(
           background: #53B3A6;
       }
       </style>
-  	</HEAD>
+    </HEAD>
   <BODY>
     <div class="form-style-6">
-      <h1>energeer.de WLAN-Einstellungen</h1>
+      <h1>settings</h1>
       <form method="POST" action='/settings'>
-        <input type="text" name="ssid" placeholder="SSID" />
-        <input type="password" name="password" placeholder="Passwort" />
-        <input type="submit" value="speichern" />
+
+        <h2>wlan</h2>
+        <input type="text" name="ssid" placeholder="ssid" />
+        <input type="password" name="password" placeholder="password" />
+
+        <h2>api</h2>
+        <input type="text" name="secret" placeholder="secret" />
+
+        <input type="submit" value="save" />
       </form>
     </div>
   </BODY>

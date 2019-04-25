@@ -10,20 +10,21 @@ APIClient::APIClient(const String& host, const int& port, const String& sha_1){
 }
 APIClient::~APIClient(){}
 
-bool APIClient::create_login(Node& node) {
-  String request_body = "{\"email\":\"" + node.email + "\",\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
-  String response = request(POST, "/node_auth", request_body);
-  Serial.println(response);
-
-  // if API does not know the sensors -> create
-  // TODO: check before if sensors exists on API
-  create_sensors(node);
-  if (response.length()){
-    node.id = get_id(response);
-    return true;
-  }
-  return false;
-}
+// TODO: node will not create itself an account ()
+// bool APIClient::create_login(Node& node) {
+//   String request_body = "{\"email\":\"" + node.email + "\",\"mac\":\"" + node.mac + "\",\"password\":\"" + node.pw + "\"}";
+//   String response = request(POST, "/node_auth", request_body);
+//   Serial.println(response);
+//
+//   // if API does not know the sensors -> create
+//   // TODO: check before if sensors exists on API
+//   create_sensors(node);
+//   if (response.length()){
+//     node.id = get_id(response);
+//     return true;
+//   }
+//   return false;
+// }
 
 bool APIClient::logged_in(Node& node){
   return token.access_token.length();
@@ -35,7 +36,7 @@ bool APIClient::login(Node& node) {
   Serial.println(response);
 
   // TODO
-  create_sensors(node);
+  // create_sensors(node);
 
   if (response.length()){
     node.id = get_id(response);
@@ -116,15 +117,16 @@ String APIClient::request(method meth, const char* path, String request_body) {
 
 // get id from json response string
 int APIClient::get_id(String json_string){
-  StaticJsonBuffer<512> jsonBuffer;
+  StaticJsonDocument<512> jsonBuffer;
   // Parse the root object
-  JsonObject &json = jsonBuffer.parseObject(json_string);
+  auto error = deserializeJson(jsonBuffer, json_string);
+  //JsonObject &json = jsonBuffer.parseObject(json_string);
 
-  if (!json.success()){
+  if (error){
     Serial.println(F("Failed to read json"));
     return -1;
   }
-  return json["data"]["id"];
+  return jsonBuffer["data"]["id"];
 }
 
 String APIClient::get_node_data(Node& node) {
@@ -156,18 +158,19 @@ bool APIClient::create_sensors(Node& node) {
 
 String APIClient::build_json_data(Node& node) {
   // Allocate the memory pool on the stack.
-  StaticJsonBuffer<1024> jsonBuffer; //TODO: capacity: arduinojson.org/assistant
-  JsonObject& _json = jsonBuffer.createObject();
-  JsonArray& _sensors = _json.createNestedArray("sensors");
+  StaticJsonDocument<1024> jsonBuffer; //TODO: capacity: arduinojson.org/assistant
+  JsonObject _json = jsonBuffer.to<JsonObject>();
+
+  JsonArray _sensors = _json.createNestedArray("sensors");
 
   // get all sensors
   for(int i = 0; i < node.sensors.size(); i++){
-    JsonObject& _s = _sensors.createNestedObject();
+    JsonObject _s = _sensors.createNestedObject();
     _s["mac"] = node.sensors[i].mac;
-    JsonArray& _data = _s.createNestedArray("sensor_data");
+    JsonArray _data = _s.createNestedArray("sensor_data");
     // get all data
     for(int j = 0; j < node.sensors[i].data.size(); j++){
-      JsonObject& _datum = _data.createNestedObject();
+      JsonObject _datum = _data.createNestedObject();
       _datum["value"] = node.sensors[i].data[j].value;
       _datum["unity"] = node.sensors[i].data[j].unity;
     }
@@ -176,7 +179,7 @@ String APIClient::build_json_data(Node& node) {
   }
 
   String json_data = "";
-  _json.printTo(json_data);
+  serializeJson(_json, json_data);
 
   return json_data;
 
